@@ -414,20 +414,9 @@ async def send_complaint_notification(complaint_data):
     if video_path:
         full_video_path = os.path.join(os.path.dirname(__file__), '..', video_path.lstrip('/'))
         
-        if os.path.exists(full_video_path):
-            try:
-                with open(full_video_path, 'rb') as video_file:
-                    video = discord.File(video_file, filename=os.path.basename(full_video_path))
-                    await channel.send(content="🎬 **Видеодоказательство:**", file=video)
-                print(f"✅ Видео отправлено в канал {channel.name}")
-            except Exception as e:
-                print(f"❌ Ошибка отправки видео: {e}")
-                await channel.send(content=f"⚠️ Не удалось отправить видео: {e}")
-        else:
-            print(f"❌ Видео файл не найден: {full_video_path}")
-            await channel.send(content=f"⚠️ Видео файл не найден: {video_path}")
-    
-    print(f"✅ Уведомление о жалобе отправлено в канал {channel.name}")
+        await channel.send(
+            content=f"🎬 **Видеодоказательство:**\n{video_path}"
+    )
 
 async def get_members_by_role(role_id):
     guild = bot.get_guild(GUILD_ID)
