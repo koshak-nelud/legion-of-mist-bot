@@ -8,15 +8,14 @@ import aiohttp
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import threading
 from collections import defaultdict
-from datetime import datetime, timedelta
+from datetime import datetime
 import urllib.parse
-import io
 
 # ============== КОНФИГУРАЦИЯ ДЛЯ RENDER ==============
 BOT_TOKEN = os.environ.get('DISCORD_BOT_TOKEN')
 GUILD_ID = int(os.environ.get('DISCORD_GUILD_ID', 0))
 PORT = int(os.environ.get('PORT', 10000))
-SITE_URL = os.environ.get('SITE_URL', 'https://koshak-nelud-github-io.onrender.com')
+SITE_URL = os.environ.get('SITE_URL', 'https://your-app.onrender.com')
 
 print(f"🌐 Сайт: {SITE_URL}")
 print(f"🔌 Порт: {PORT}")
@@ -71,13 +70,14 @@ server_stats = {
 supporters_cache = []
 last_supporters_update = 0
 
-# ============== HTTP-СЕРВЕР ДЛЯ RENDER HEALTH CHECK ==============
+# ============== HTTP-СЕРВЕР ДЛЯ RENDER (МАСКИРОВКА ПОД WEB SERVICE) ==============
 class APIHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         parsed = urllib.parse.urlparse(self.path)
         path = parsed.path
         
-        if path == '/health' or path == '/':
+        # Health check для Render
+        if path == '/' or path == '/health':
             self.send_response(200)
             self.send_header('Content-type', 'application/json')
             self.end_headers()
@@ -86,7 +86,7 @@ class APIHandler(BaseHTTPRequestHandler):
             response = {
                 'status': 'ok',
                 'bot_ready': bot.is_ready(),
-                'bot_name': bot.user.name if bot.user else None,
+                'bot_name': bot.user.name if bot.user else 'Starting...',
                 'guild_name': guild.name if guild else None,
                 'guild_id': GUILD_ID
             }
@@ -127,7 +127,13 @@ class APIHandler(BaseHTTPRequestHandler):
             self.wfile.write(json.dumps(response).encode())
             
         elif path == '/top-messages':
-            limit = int(parsed.query.split('=')[1]) if 'limit=' in parsed.query else 10
+            limit = 10
+            if 'limit=' in parsed.query:
+                try:
+                    limit = int(parsed.query.split('limit=')[1].split('&')[0])
+                except:
+                    pass
+            
             sorted_users = sorted(user_messages.items(), key=lambda x: x[1], reverse=True)[:limit]
             
             result = []
@@ -145,7 +151,13 @@ class APIHandler(BaseHTTPRequestHandler):
             self.wfile.write(json.dumps({'success': True, 'top': result}).encode())
             
         elif path == '/top-voice':
-            limit = int(parsed.query.split('=')[1]) if 'limit=' in parsed.query else 10
+            limit = 10
+            if 'limit=' in parsed.query:
+                try:
+                    limit = int(parsed.query.split('limit=')[1].split('&')[0])
+                except:
+                    pass
+            
             sorted_users = sorted(user_voice_time.items(), key=lambda x: x[1], reverse=True)[:limit]
             
             result = []
@@ -246,15 +258,15 @@ class APIHandler(BaseHTTPRequestHandler):
         self.wfile.write(json.dumps(response).encode())
     
     def log_message(self, format, *args):
-        # Отключаем логи HTTP-запросов
+        # Отключаем логи HTTP-запросов чтобы не засорять консоль
         pass
 
 def run_http_server():
     server = HTTPServer(('0.0.0.0', PORT), APIHandler)
-    print(f"🏥 HTTP сервер запущен на порту {PORT}")
+    print(f"✅ HTTP-сервер запущен на порту {PORT}. Render будет считать это Web Service.")
     server.serve_forever()
 
-# ============== ФУНКЦИИ БОТА (ВСЕ ОСТАЛЬНЫЕ ОСТАЮТСЯ БЕЗ ИЗМЕНЕНИЙ) ==============
+# ============== ФУНКЦИИ БОТА ==============
 
 def update_server_stats():
     global server_stats
