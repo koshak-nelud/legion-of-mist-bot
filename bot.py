@@ -15,7 +15,7 @@ import urllib.parse
 BOT_TOKEN = os.environ.get('DISCORD_BOT_TOKEN')
 GUILD_ID = int(os.environ.get('DISCORD_GUILD_ID', 0))
 PORT = int(os.environ.get('PORT', 10000))
-SITE_URL = os.environ.get('SITE_URL', 'https://your-app.onrender.com')
+SITE_URL = os.environ.get('SITE_URL', 'https://koshak-nelud-github-io.onrender.com/')
 
 print(f"🌐 Сайт: {SITE_URL}")
 print(f"🔌 Порт: {PORT}")
