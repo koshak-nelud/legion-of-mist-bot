@@ -10,6 +10,9 @@ import threading
 from collections import defaultdict
 from datetime import datetime
 import urllib.parse
+import sqlite3
+
+
 
 # ============== КОНФИГУРАЦИЯ ДЛЯ RENDER ==============
 BOT_TOKEN = os.environ.get('DISCORD_BOT_TOKEN')
@@ -69,6 +72,26 @@ server_stats = {
 
 supporters_cache = []
 last_supporters_update = 0
+
+# ====== БАЗА ======
+conn = sqlite3.connect('stats.db', check_same_thread=False)
+cursor = conn.cursor()
+
+cursor.execute('''
+CREATE TABLE IF NOT EXISTS stats (
+    user_id INTEGER PRIMARY KEY,
+    messages INTEGER DEFAULT 0,
+    voice_time INTEGER DEFAULT 0
+)
+''')
+conn.commit()
+
+def load_stats():
+    cursor.execute("SELECT user_id, messages, voice_time FROM stats")
+    for user_id, messages, voice_time in cursor.fetchall():
+        user_messages[user_id] = messages
+        user_voice_time[user_id] = voice_time
+    print(f"💾 Загружено из БД")
 
 # ============== HTTP-СЕРВЕР ДЛЯ RENDER (МАСКИРОВКА ПОД WEB SERVICE) ==============
 class APIHandler(BaseHTTPRequestHandler):
@@ -507,6 +530,11 @@ async def on_message(message):
         return
     
     user_messages[message.author.id] += 1
+    cursor.execute('''
+    INSERT INTO stats (user_id, messages, voice_time)
+    VALUES (?, 1, 0)
+    ON CONFLICT(user_id) DO UPDATE SET messages = messages + 1
+    ''', (message.author.id,))
     
     avatar_url = message.author.avatar.url if message.author.avatar else message.author.default_avatar.url
     user_avatars[str(message.author.id)] = avatar_url
@@ -523,6 +551,11 @@ async def on_voice_state_update(member, before, after):
         if member.id in user_voice_start:
             duration = time.time() - user_voice_start[member.id]
             user_voice_time[member.id] += int(duration)
+            cursor.execute('''
+            INSERT INTO stats (user_id, messages, voice_time)
+            VALUES (?, 0, ?)
+            ON CONFLICT(user_id) DO UPDATE SET voice_time = voice_time + ?
+            ''', (member.id, int(duration), int(duration)))
             del user_voice_start[member.id]
             print(f"🔊 {member.name} пробыл в голосовом канале {duration//60} минут")
     
@@ -530,6 +563,11 @@ async def on_voice_state_update(member, before, after):
         if member.id in user_voice_start:
             duration = time.time() - user_voice_start[member.id]
             user_voice_time[member.id] += int(duration)
+            cursor.execute('''
+            INSERT INTO stats (user_id, messages, voice_time)
+            VALUES (?, 0, ?)
+            ON CONFLICT(user_id) DO UPDATE SET voice_time = voice_time + ?
+            ''', (member.id, int(duration), int(duration)))
             user_voice_start[member.id] = time.time()
     
     update_server_stats()
@@ -537,6 +575,11 @@ async def on_voice_state_update(member, before, after):
 @tasks.loop(minutes=5)
 async def save_stats():
     print(f"📊 Статистика: {len(user_messages)} пользователей с сообщениями, {len(user_voice_time)} с голосовым временем")
+    
+@tasks.loop(minutes=2)
+async def auto_save_db():
+    conn.commit()
+    print("💾 БД сохранена")
 
 # ============== КОМАНДЫ БОТА ==============
 
@@ -598,6 +641,8 @@ async def show_stats(ctx):
 async def on_ready():
     print(f'\n{"="*50}')
     print(f'✅ Бот {bot.user.name} запущен!')
+    load_stats()
+    auto_save_db.start()
     print(f'📡 ID бота: {bot.user.id}')
     
     guild = bot.get_guild(GUILD_ID)
